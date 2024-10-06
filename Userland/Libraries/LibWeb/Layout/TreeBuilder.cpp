@@ -380,6 +380,23 @@ void TreeBuilder::create_layout_tree(DOM::Node& dom_node, TreeBuilder::Context& 
         return false;
     }();
 
+    // NOTE: The marker must come first, before even `:before` pseudo-elements, at least if
+    // it has `list-style-position: inside`:
+    //
+    //   The marker box is placed as the first inline box in the
+    //   principal block box, before the element's content and before
+    //   any :before pseudo-elements.
+    //
+    // https://www.w3.org/TR/2011/REC-CSS2-20110607/generate.html#propdef-list-style-position
+    if (is<ListItemBox>(*layout_node)) {
+        auto& element = static_cast<DOM::Element&>(dom_node);
+        auto marker_style = style_computer.compute_style(element, CSS::Selector::PseudoElement::Type::Marker);
+        auto list_item_marker = document.heap().allocate_without_realm<ListItemMarkerBox>(document, layout_node->computed_values().list_style_type(), layout_node->computed_values().list_style_position(), calculate_list_item_index(dom_node), *marker_style);
+        static_cast<ListItemBox&>(*layout_node).set_marker(list_item_marker);
+        element.set_pseudo_element_node({}, CSS::Selector::PseudoElement::Type::Marker, list_item_marker);
+        layout_node->append_child(*list_item_marker);
+    }
+
     // Add node for the ::before pseudo-element.
     if (is<DOM::Element>(dom_node) && layout_node->can_have_children() && !element_has_content_visibility_hidden) {
         auto& element = static_cast<DOM::Element&>(dom_node);
@@ -408,15 +425,6 @@ void TreeBuilder::create_layout_tree(DOM::Node& dom_node, TreeBuilder::Context& 
                 create_layout_tree(top_layer_element, context);
         }
         pop_parent();
-    }
-
-    if (is<ListItemBox>(*layout_node)) {
-        auto& element = static_cast<DOM::Element&>(dom_node);
-        auto marker_style = style_computer.compute_style(element, CSS::Selector::PseudoElement::Type::Marker);
-        auto list_item_marker = document.heap().allocate_without_realm<ListItemMarkerBox>(document, layout_node->computed_values().list_style_type(), layout_node->computed_values().list_style_position(), calculate_list_item_index(dom_node), *marker_style);
-        static_cast<ListItemBox&>(*layout_node).set_marker(list_item_marker);
-        element.set_pseudo_element_node({}, CSS::Selector::PseudoElement::Type::Marker, list_item_marker);
-        layout_node->append_child(*list_item_marker);
     }
 
     if (is<HTML::HTMLSlotElement>(dom_node)) {

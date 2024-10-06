@@ -1208,13 +1208,12 @@ void BlockFormattingContext::layout_list_item_marker(ListItemBox const& list_ite
     auto& marker_state = m_state.get_mutable(marker);
     auto& list_item_state = m_state.get_mutable(list_item_box);
 
+    if (marker.list_style_position() == CSS::ListStylePosition::Inside)
+        // NOTE: in this case it's laid out like a normal inline child
+        return;
+
     auto default_marker_width = max(4, marker.first_available_font().pixel_size_rounded_up() - 4);
     auto final_marker_width = marker_state.content_width() + default_marker_width;
-
-    if (marker.list_style_position() == CSS::ListStylePosition::Inside) {
-        list_item_state.set_content_offset({ final_marker_width, list_item_state.offset.y() });
-        list_item_state.set_content_width(list_item_state.content_width() - final_marker_width);
-    }
 
     auto offset_y = max(CSSPixels(0), (marker.computed_values().line_height() - marker_state.content_height()) / 2);
 

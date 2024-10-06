@@ -287,8 +287,11 @@ Optional<InlineLevelIterator::Item> InlineLevelIterator::next_without_lookahead(
     }
 
     if (is<Layout::ListItemMarkerBox>(*m_current_node)) {
-        skip_to_next();
-        return next_without_lookahead();
+        auto& marker = verify_cast<Layout::ListItemMarkerBox>(*m_current_node);
+        if (marker.list_style_position() == CSS::ListStylePosition::Outside) {
+            skip_to_next();
+            return next_without_lookahead();
+        }
     }
 
     if (!is<Layout::Box>(*m_current_node)) {
