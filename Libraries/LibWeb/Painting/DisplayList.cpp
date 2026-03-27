@@ -4,11 +4,27 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#include <AK/Atomic.h>
 #include <AK/TemporaryChange.h>
+#include <LibCore/Environment.h>
+#include <LibCore/System.h>
 #include <LibGfx/PaintingSurface.h>
 #include <LibWeb/Painting/DisplayList.h>
 
+#include <core/SkCanvas.h>
+#include <core/SkPicture.h>
+#include <core/SkPictureRecorder.h>
+#include <core/SkStream.h>
+
 namespace Web::Painting {
+
+static Optional<ByteString> skp_dump_directory()
+{
+    auto directory = Core::Environment::get("LADYBIRD_DUMP_SKP_DIR"sv);
+    if (!directory.has_value() || directory->is_empty())
+        return {};
+    return directory->to_byte_string();
+}
 
 bool DisplayList::append(DisplayListCommand&& command, VisualContextIndex context_index)
 {
@@ -42,13 +58,50 @@ static bool command_is_clip(DisplayListCommand const& command)
 
 void DisplayListPlayer::execute(DisplayList& display_list, ScrollStateSnapshotByDisplayList&& scroll_state_snapshot_by_display_list, RefPtr<Gfx::PaintingSurface> surface)
 {
+    static Atomic<u64> s_skp_dump_counter { 0 };
+
     TemporaryChange change { m_scroll_state_snapshots_by_display_list, move(scroll_state_snapshot_by_display_list) };
     if (surface) {
         surface->lock_context();
     }
     m_surface = surface;
     auto scroll_state_snapshot = m_scroll_state_snapshots_by_display_list.get(display_list).value_or({});
-    execute_impl(display_list, scroll_state_snapshot);
+    auto dump_directory = skp_dump_directory();
+    if (surface && dump_directory.has_value()) {
+        auto dump_directory_stat = Core::System::stat(*dump_directory);
+        if (dump_directory_stat.is_error() || !S_ISDIR(dump_directory_stat.value().st_mode)) {
+            dbgln("LADYBIRD_DUMP_SKP_DIR is not a directory: {}", *dump_directory);
+            execute_impl(display_list, scroll_state_snapshot);
+        } else {
+            SkPictureRecorder recorder;
+            auto bounds = SkRect::MakeWH(surface->size().width(), surface->size().height());
+            auto* recording_canvas = recorder.beginRecording(bounds);
+            auto recording_surface = Gfx::PaintingSurface::create_for_recording(surface->size(), *recording_canvas);
+
+            {
+                TemporaryChange surface_change { m_surface, RefPtr<Gfx::PaintingSurface> { *recording_surface } };
+                execute_impl(display_list, scroll_state_snapshot);
+            }
+
+            auto picture = recorder.finishRecordingAsPicture();
+            if (!picture) {
+                dbgln("Failed to record SkPicture for display list execution");
+                execute_impl(display_list, scroll_state_snapshot);
+            } else {
+                auto dump_id = s_skp_dump_counter.fetch_add(1);
+                auto path = ByteString::formatted("{}/frame-{}-{}x{}.skp", *dump_directory, dump_id, surface->size().width(), surface->size().height());
+                SkFILEWStream stream(path.characters());
+                if (!stream.isValid()) {
+                    dbgln("Failed to open SKP dump path: {}", path);
+                } else {
+                    picture->serialize(&stream);
+                }
+                surface->canvas().drawPicture(picture);
+            }
+        }
+    } else {
+        execute_impl(display_list, scroll_state_snapshot);
+    }
     if (surface)
         flush();
     m_surface = nullptr;

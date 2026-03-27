@@ -27,7 +27,22 @@ struct PaintingSurface::Impl {
     RefPtr<SkiaBackendContext> context;
     IntSize size;
     sk_sp<SkSurface> surface;
+    SkCanvas* recording_canvas { nullptr };
     RefPtr<Bitmap> bitmap;
+
+    Impl(RefPtr<SkiaBackendContext> context, IntSize size, sk_sp<SkSurface> surface, RefPtr<Bitmap> bitmap)
+        : context(move(context))
+        , size(size)
+        , surface(move(surface))
+        , bitmap(move(bitmap))
+    {
+    }
+
+    Impl(IntSize size, SkCanvas& recording_canvas)
+        : size(size)
+        , recording_canvas(&recording_canvas)
+    {
+    }
 };
 
 #if defined(AK_OS_MACOS) || defined(USE_VULKAN_IMAGES)
@@ -116,6 +131,11 @@ NonnullRefPtr<PaintingSurface> PaintingSurface::create_with_size(IntSize size, B
     return adopt_ref(*new PaintingSurface(make<Impl>(context, size, surface, bitmap)));
 }
 
+NonnullRefPtr<PaintingSurface> PaintingSurface::create_for_recording(IntSize size, SkCanvas& recording_canvas)
+{
+    return adopt_ref(*new PaintingSurface(make<Impl>(size, recording_canvas)));
+}
+
 NonnullRefPtr<PaintingSurface> PaintingSurface::wrap_bitmap(Bitmap& bitmap)
 {
     auto color_type = to_skia_color_type(bitmap.format());
@@ -160,6 +180,7 @@ PaintingSurface::~PaintingSurface()
 void PaintingSurface::read_into_bitmap(Bitmap& bitmap)
 {
     lock_context();
+    VERIFY(m_impl->surface);
     auto color_type = to_skia_color_type(bitmap.format());
     auto alpha_type = to_skia_alpha_type(bitmap.format(), bitmap.alpha_type());
     auto image_info = SkImageInfo::Make(bitmap.width(), bitmap.height(), color_type, alpha_type, SkColorSpace::MakeSRGB());
@@ -171,6 +192,7 @@ void PaintingSurface::read_into_bitmap(Bitmap& bitmap)
 void PaintingSurface::write_from_bitmap(Bitmap const& bitmap)
 {
     lock_context();
+    VERIFY(m_impl->surface);
     auto color_type = to_skia_color_type(bitmap.format());
     auto alpha_type = to_skia_alpha_type(bitmap.format(), bitmap.alpha_type());
     auto image_info = SkImageInfo::Make(bitmap.width(), bitmap.height(), color_type, alpha_type, SkColorSpace::MakeSRGB());
@@ -191,17 +213,22 @@ IntRect PaintingSurface::rect() const
 
 SkCanvas& PaintingSurface::canvas() const
 {
-    return *m_impl->surface->getCanvas();
+    if (m_impl->surface)
+        return *m_impl->surface->getCanvas();
+    VERIFY(m_impl->recording_canvas);
+    return *m_impl->recording_canvas;
 }
 
 SkSurface& PaintingSurface::sk_surface() const
 {
+    VERIFY(m_impl->surface);
     return *m_impl->surface;
 }
 
 void PaintingSurface::notify_content_will_change()
 {
     lock_context();
+    VERIFY(m_impl->surface);
     m_impl->surface->notifyContentWillChange(SkSurface::kDiscard_ContentChangeMode);
     unlock_context();
 }
@@ -209,6 +236,7 @@ void PaintingSurface::notify_content_will_change()
 template<>
 sk_sp<SkImage> PaintingSurface::sk_image_snapshot() const
 {
+    VERIFY(m_impl->surface);
     return m_impl->surface->makeImageSnapshot();
 }
 
