@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <AK/ByteString.h>
 #include <AK/Vector.h>
 #include <LibWeb/Export.h>
 #include <LibWeb/Geolocation/Geolocation.h>
@@ -122,6 +123,12 @@ public:
         m_screenshot_tasks.enqueue({ node_id });
         set_needs_repaint();
     }
+    void process_skp_dump_requests();
+    void queue_skp_dump_task(ByteString path)
+    {
+        m_skp_dump_tasks.enqueue({ move(path) });
+        set_needs_repaint();
+    }
 
 private:
     TraversableNavigable(GC::Ref<Page>);
@@ -178,6 +185,11 @@ private:
         Optional<Web::UniqueNodeID> node_id;
     };
     Queue<ScreenshotTask> m_screenshot_tasks;
+
+    struct SkpDumpTask {
+        ByteString path;
+    };
+    Queue<SkpDumpTask> m_skp_dump_tasks;
 };
 
 struct BrowsingContextAndDocument {

@@ -109,14 +109,14 @@ void Application::create_platform_options(WebView::BrowserOptions&, WebView::Req
 
 NonnullOwnPtr<Core::EventLoop> Application::create_platform_event_loop()
 {
-    if (!browser_options().headless_mode.has_value()) {
+    if (!browser_options().is_headless()) {
         Core::EventLoopManager::install(*new EventLoopManagerQt);
         m_application = make<LadybirdQApplication>(arguments());
     }
 
     auto event_loop = WebView::Application::create_platform_event_loop();
 
-    if (!browser_options().headless_mode.has_value())
+    if (!browser_options().is_headless())
         static_cast<EventLoopImplementationQt&>(event_loop->impl()).set_main_loop();
 
     return event_loop;
@@ -192,7 +192,7 @@ void Application::display_error_dialog(StringView error_message) const
 
 Utf16String Application::clipboard_text() const
 {
-    if (browser_options().headless_mode.has_value())
+    if (browser_options().is_headless())
         return WebView::Application::clipboard_text();
 
     auto const* clipboard = QGuiApplication::clipboard();
@@ -201,7 +201,7 @@ Utf16String Application::clipboard_text() const
 
 Vector<Web::Clipboard::SystemClipboardRepresentation> Application::clipboard_entries() const
 {
-    if (browser_options().headless_mode.has_value())
+    if (browser_options().is_headless())
         return WebView::Application::clipboard_entries();
 
     Vector<Web::Clipboard::SystemClipboardRepresentation> representations;
@@ -223,7 +223,7 @@ Vector<Web::Clipboard::SystemClipboardRepresentation> Application::clipboard_ent
 
 void Application::insert_clipboard_entry(Web::Clipboard::SystemClipboardRepresentation entry)
 {
-    if (browser_options().headless_mode.has_value()) {
+    if (browser_options().is_headless()) {
         WebView::Application::insert_clipboard_entry(move(entry));
         return;
     }

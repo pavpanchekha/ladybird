@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <AK/ByteString.h>
+#include <AK/Error.h>
 #include <AK/Forward.h>
 #include <AK/NonnullRefPtr.h>
 #include <AK/SegmentedVector.h>
@@ -25,6 +27,7 @@ public:
     virtual ~DisplayListPlayer() = default;
 
     void execute(DisplayList&, ScrollStateSnapshotByDisplayList&&, RefPtr<Gfx::PaintingSurface>);
+    ErrorOr<void> dump_skp(DisplayList&, ScrollStateSnapshotByDisplayList&&, Gfx::IntSize size, ByteString const& path);
 
 protected:
     Gfx::PaintingSurface& surface() const { return *m_surface; }

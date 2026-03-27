@@ -165,6 +165,7 @@ public:
     void did_update_navigation_buttons_state(Badge<WebContentClient>, bool back_enabled, bool forward_enabled) const;
 
     void did_allocate_backing_stores(Badge<WebContentClient>, i32 front_bitmap_id, Web::SharedBackingStore front_backing_store, i32 back_bitmap_id, Web::SharedBackingStore back_backing_store);
+    u64 paint_generation() const { return m_paint_generation; }
 
     enum class ScreenshotType {
         Visible,
@@ -173,6 +174,9 @@ public:
     NonnullRefPtr<Core::Promise<LexicalPath>> take_screenshot(ScreenshotType);
     NonnullRefPtr<Core::Promise<LexicalPath>> take_dom_node_screenshot(Web::UniqueNodeID);
     virtual void did_receive_screenshot(Badge<WebContentClient>, Gfx::ShareableBitmap const&);
+
+    NonnullRefPtr<Core::Promise<ByteString, ByteString>> dump_skp(ByteString output_path);
+    void did_finish_dumping_skp(Badge<WebContentClient>, ByteString path, Optional<ByteString> const& error_message);
 
     NonnullRefPtr<Core::Promise<String>> request_internal_page_info(PageInfoType);
     void did_receive_internal_page_info(Badge<WebContentClient>, PageInfoType, Optional<Core::AnonymousBuffer> const&);
@@ -389,7 +393,9 @@ protected:
     RefPtr<Core::Timer> m_repeated_crash_timer;
 
     RefPtr<Core::Promise<LexicalPath>> m_pending_screenshot;
+    RefPtr<Core::Promise<ByteString, ByteString>> m_pending_skp_dump;
     RefPtr<Core::Promise<String>> m_pending_info_request;
+    u64 m_paint_generation { 0 };
 
     Web::HTML::VisibilityState m_system_visibility_state { Web::HTML::VisibilityState::Hidden };
 

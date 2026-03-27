@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <AK/ByteString.h>
 #include <AK/HashTable.h>
 #include <AK/String.h>
 #include <AK/Tuple.h>
@@ -206,6 +207,7 @@ public:
     void record_display_list_and_scroll_state(PaintConfig);
     void paint_next_frame();
     void render_screenshot(Gfx::PaintingSurface&, PaintConfig, Function<void()>&& callback);
+    void dump_skp(ByteString path, PaintConfig, Function<void(Optional<ByteString>)>&& callback);
 
     bool needs_repaint() const { return m_needs_repaint; }
     void set_needs_repaint() { m_needs_repaint = true; }

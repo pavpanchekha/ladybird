@@ -73,6 +73,7 @@ endpoint WebContentClient
     did_get_style_sheet_source(u64 page_id, Web::CSS::StyleSheetIdentifier identifier, URL::URL base_url, String source) =|
 
     did_take_screenshot(u64 page_id, Gfx::ShareableBitmap screenshot) =|
+    did_dump_skp(u64 page_id, ByteString path, Optional<ByteString> error_message) =|
 
     did_get_internal_page_info(u64 page_id, WebView::PageInfoType type, Optional<Core::AnonymousBuffer> info) =|
 

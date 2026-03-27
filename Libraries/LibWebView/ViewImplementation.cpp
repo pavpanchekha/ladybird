@@ -149,6 +149,7 @@ void ViewImplementation::server_did_paint(Badge<WebContentClient>, i32 bitmap_id
         m_client_state.back_bitmap.last_painted_size = size.to_type<Web::DevicePixels>();
         swap(m_client_state.back_bitmap, m_client_state.front_bitmap);
         m_backup_bitmap = nullptr;
+        ++m_paint_generation;
         if (on_ready_to_paint)
             on_ready_to_paint();
     }
@@ -680,7 +681,7 @@ void ViewImplementation::initialize_client(CreateNewClient create_new_client)
 
 void ViewImplementation::handle_web_content_process_crash(LoadErrorPage load_error_page)
 {
-    auto const headless_mode = Application::browser_options().headless_mode.has_value();
+    auto const headless_mode = Application::browser_options().is_headless();
 
     if (!headless_mode) {
         dbgln("\033[31;1mWebContent process crashed!\033[0m Last page loaded: {}", m_url);
@@ -853,6 +854,33 @@ void ViewImplementation::did_receive_screenshot(Badge<WebContentClient>, Gfx::Sh
         m_pending_screenshot->resolve(result.release_value());
 
     m_pending_screenshot = nullptr;
+}
+
+NonnullRefPtr<Core::Promise<ByteString, ByteString>> ViewImplementation::dump_skp(ByteString output_path)
+{
+    auto promise = Core::Promise<ByteString, ByteString>::construct();
+
+    if (m_pending_skp_dump) {
+        promise->reject(ByteString { "An SKP dump is already in progress"sv });
+        return promise;
+    }
+
+    m_pending_skp_dump = promise;
+    client().async_dump_document_skp(page_id(), move(output_path));
+
+    return promise;
+}
+
+void ViewImplementation::did_finish_dumping_skp(Badge<WebContentClient>, ByteString path, Optional<ByteString> const& error_message)
+{
+    VERIFY(m_pending_skp_dump);
+
+    if (error_message.has_value())
+        m_pending_skp_dump->reject(*error_message);
+    else
+        m_pending_skp_dump->resolve(move(path));
+
+    m_pending_skp_dump = nullptr;
 }
 
 NonnullRefPtr<Core::Promise<String>> ViewImplementation::request_internal_page_info(PageInfoType type)

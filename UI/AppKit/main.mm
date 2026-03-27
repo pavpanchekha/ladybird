@@ -42,7 +42,7 @@ ErrorOr<int> ladybird_main(Main::Arguments arguments)
     auto app = TRY(Ladybird::Application::create(arguments));
     WebView::BrowserProcess browser_process;
 
-    if (auto const& browser_options = WebView::Application::browser_options(); !browser_options.headless_mode.has_value()) {
+    if (auto const& browser_options = WebView::Application::browser_options(); !browser_options.is_headless()) {
         if (browser_options.force_new_process == WebView::ForceNewProcess::No) {
             auto disposition = TRY(browser_process.connect(browser_options.raw_urls, browser_options.new_window));
 

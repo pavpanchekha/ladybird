@@ -103,6 +103,7 @@ public:
     virtual Web::DisplayListPlayerType display_list_player_type() const override;
 
     void queue_screenshot_task(Optional<Web::UniqueNodeID> node_id);
+    void queue_skp_dump_task(ByteString path);
 
 private:
     PageClient(PageHost&, u64 id);
@@ -193,6 +194,7 @@ private:
     virtual void page_did_mutate_dom(FlyString const& type, Web::DOM::Node const& target, Web::DOM::NodeList& added_nodes, Web::DOM::NodeList& removed_nodes, GC::Ptr<Web::DOM::Node> previous_sibling, GC::Ptr<Web::DOM::Node> next_sibling, Optional<String> const& attribute_name) override;
     virtual void page_did_paint(Gfx::IntRect const& content_rect, i32 bitmap_id) override;
     virtual void page_did_take_screenshot(Gfx::ShareableBitmap const& screenshot) override;
+    virtual void page_did_dump_skp(ByteString const& path, Optional<ByteString> const& error_message) override;
     virtual void received_message_from_web_ui(String const& name, JS::Value data) override;
     virtual void page_did_start_network_request(u64 request_id, URL::URL const&, ByteString const&, Vector<HTTP::Header> const&, ReadonlyBytes, Optional<String>) override;
     virtual void page_did_receive_network_response_headers(u64 request_id, u32 status_code, Optional<String>, Vector<HTTP::Header> const&) override;

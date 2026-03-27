@@ -129,6 +129,7 @@ ErrorOr<void> Application::initialize(Main::Arguments const& arguments)
     Vector<ByteString> raw_urls;
     Vector<ByteString> certificates;
     Optional<HeadlessMode> headless_mode;
+    Optional<StringView> dump_skp_path;
     Optional<int> window_width;
     Optional<int> window_height;
     bool new_window = false;
@@ -190,6 +191,7 @@ ErrorOr<void> Application::initialize(Main::Arguments const& arguments)
 
     args_parser.add_option(window_width, "Set viewport width in pixels (default: 800) (currently only supported for headless mode)", "window-width", 0, "pixels");
     args_parser.add_option(window_height, "Set viewport height in pixels (default: 600) (currently only supported for headless mode)", "window-height", 0, "pixels");
+    args_parser.add_option(dump_skp_path, "Load a page, dump a full-page SKP to the given path, and exit", "dump-skp", 0, "path");
     args_parser.add_option(certificates, "Path to a certificate file", "certificate", 'C', "certificate");
     args_parser.add_option(new_window, "Force opening in a new window", "new-window", 'n');
     args_parser.add_option(force_new_process, "Force creation of a new browser process", "force-new-process");
@@ -253,6 +255,9 @@ ErrorOr<void> Application::initialize(Main::Arguments const& arguments)
     create_platform_arguments(args_parser);
     args_parser.parse(m_arguments);
 
+    if (headless_mode.has_value() && dump_skp_path.has_value())
+        return Error::from_string_literal("Cannot combine --headless with --dump-skp");
+
     // Our persisted SQL storage assumes it runs in a singleton process. If we have multiple UI processes accessing
     // the same underlying database, one of them is likely to fail.
     if (force_new_process)
@@ -277,6 +282,7 @@ ErrorOr<void> Application::initialize(Main::Arguments const& arguments)
         .urls = sanitize_urls(raw_urls, m_settings.new_tab_page_url()),
         .raw_urls = move(raw_urls),
         .headless_mode = headless_mode,
+        .dump_skp_path = dump_skp_path.has_value() ? Optional<ByteString> { *dump_skp_path } : OptionalNone {},
         .new_window = new_window ? NewWindow::Yes : NewWindow::No,
         .force_new_process = force_new_process ? ForceNewProcess::Yes : ForceNewProcess::No,
         .allow_popups = allow_popups ? AllowPopups::Yes : AllowPopups::No,
@@ -573,14 +579,86 @@ static NonnullRefPtr<Core::Timer> load_page_for_screenshot_and_exit(Core::EventL
 
 static void load_page_for_info_and_exit(Core::EventLoop& event_loop, HeadlessWebView& view, URL::URL const& url, WebView::PageInfoType type)
 {
-    view.on_load_finish = [&view, &event_loop, url, type](auto const& loaded_url) {
-        if (!url.equals(loaded_url, URL::ExcludeFragment::Yes))
-            return;
-
+    view.on_load_finish = [&view, &event_loop, type](auto const&) {
+        view.on_load_finish = {};
         view.request_internal_page_info(type)->when_resolved([&event_loop](auto const& text) {
             outln("{}", text);
             event_loop.quit(0);
         });
+    };
+
+    view.load(url);
+}
+
+static void load_page_for_skp_and_exit(Core::EventLoop& event_loop, HeadlessWebView& view, URL::URL const& url, ByteString const& output_path)
+{
+    static constexpr int skp_dump_settle_delay_ms = 250;
+
+    struct State : RefCounted<State> {
+        bool navigation_started { false };
+        bool load_finished { false };
+        bool painted_after_load { false };
+        bool dump_requested { false };
+        u64 paint_generation_before_navigation { 0 };
+        RefPtr<Core::Timer> dump_timer;
+    };
+
+    auto state = make_ref_counted<State>();
+
+    auto request_dump = [&view, &event_loop, output_path, state]() {
+        if (state->dump_requested)
+            return;
+        state->dump_requested = true;
+        view.on_load_start = {};
+        view.on_load_finish = {};
+        view.on_ready_to_paint = {};
+        auto promise = view.dump_skp(output_path);
+        promise->on_resolution = [&event_loop](ByteString& path) -> ErrorOr<void, ByteString> {
+            outln("Saved SKP to: {}", path);
+            event_loop.quit(0);
+            return {};
+        };
+        promise->on_rejection = [&event_loop](ByteString& error) {
+            warnln("Unable to dump SKP: {}", error);
+            event_loop.quit(1);
+        };
+    };
+
+    auto schedule_dump = [state, request_dump]() {
+        if (state->dump_requested)
+            return;
+        if (!state->dump_timer) {
+            state->dump_timer = Core::Timer::create_single_shot(skp_dump_settle_delay_ms, [request_dump] {
+                request_dump();
+            });
+        }
+        state->dump_timer->restart();
+    };
+
+    view.on_load_start = [&view, state](auto const&, bool) {
+        if (state->navigation_started)
+            return;
+        state->navigation_started = true;
+        state->paint_generation_before_navigation = view.paint_generation();
+    };
+
+    view.on_load_finish = [&view, state, schedule_dump](auto const&) {
+        if (!state->navigation_started || state->dump_requested)
+            return;
+        state->load_finished = true;
+        if (view.paint_generation() > state->paint_generation_before_navigation)
+            state->painted_after_load = true;
+        if (state->painted_after_load)
+            schedule_dump();
+    };
+
+    view.on_ready_to_paint = [&view, state, schedule_dump]() {
+        if (!state->load_finished || state->dump_requested)
+            return;
+        if (view.paint_generation() <= state->paint_generation_before_navigation)
+            return;
+        state->painted_after_load = true;
+        schedule_dump();
     };
 
     view.load(url);
@@ -600,7 +678,7 @@ ErrorOr<int> Application::execute()
     OwnPtr<HeadlessWebView> view;
     RefPtr<Core::Timer> screenshot_timer;
 
-    if (m_browser_options.headless_mode.has_value()) {
+    if (m_browser_options.is_headless()) {
         auto theme_path = LexicalPath::join(WebView::s_ladybird_resource_root, "themes"sv, "Default.ini"sv);
         auto theme = TRY(Gfx::load_system_theme(theme_path.string()));
 
@@ -610,21 +688,25 @@ ErrorOr<int> Application::execute()
             if (m_browser_options.urls.size() != 1)
                 return Error::from_string_literal("Headless mode currently only supports exactly one URL");
 
-            switch (*m_browser_options.headless_mode) {
-            case HeadlessMode::Screenshot:
-                screenshot_timer = load_page_for_screenshot_and_exit(*m_event_loop, *view, m_browser_options.urls.first(), 1);
-                break;
-            case HeadlessMode::LayoutTree:
-                load_page_for_info_and_exit(*m_event_loop, *view, m_browser_options.urls.first(), WebView::PageInfoType::LayoutTree | WebView::PageInfoType::PaintTree);
-                break;
-            case HeadlessMode::Text:
-                load_page_for_info_and_exit(*m_event_loop, *view, m_browser_options.urls.first(), WebView::PageInfoType::Text);
-                break;
-            case HeadlessMode::Manual:
-                load_page_and_exit_on_close(*m_event_loop, *view, m_browser_options.urls.first());
-                break;
-            case HeadlessMode::Test:
-                VERIFY_NOT_REACHED();
+            if (m_browser_options.dump_skp_path.has_value()) {
+                load_page_for_skp_and_exit(*m_event_loop, *view, m_browser_options.urls.first(), *m_browser_options.dump_skp_path);
+            } else {
+                switch (*m_browser_options.headless_mode) {
+                case HeadlessMode::Screenshot:
+                    screenshot_timer = load_page_for_screenshot_and_exit(*m_event_loop, *view, m_browser_options.urls.first(), 1);
+                    break;
+                case HeadlessMode::LayoutTree:
+                    load_page_for_info_and_exit(*m_event_loop, *view, m_browser_options.urls.first(), WebView::PageInfoType::LayoutTree | WebView::PageInfoType::PaintTree);
+                    break;
+                case HeadlessMode::Text:
+                    load_page_for_info_and_exit(*m_event_loop, *view, m_browser_options.urls.first(), WebView::PageInfoType::Text);
+                    break;
+                case HeadlessMode::Manual:
+                    load_page_and_exit_on_close(*m_event_loop, *view, m_browser_options.urls.first());
+                    break;
+                case HeadlessMode::Test:
+                    VERIFY_NOT_REACHED();
+                }
             }
         }
     }
@@ -699,7 +781,7 @@ void Application::process_did_exit(Process&& process)
 
 ErrorOr<LexicalPath> Application::path_for_downloaded_file(StringView file) const
 {
-    if (browser_options().headless_mode.has_value()) {
+    if (browser_options().is_headless()) {
         auto downloads_directory = Core::StandardPaths::downloads_directory();
 
         if (!FileSystem::is_directory(downloads_directory)) {

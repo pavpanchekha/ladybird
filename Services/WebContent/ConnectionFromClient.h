@@ -150,6 +150,7 @@ private:
 
     virtual void take_document_screenshot(u64 page_id) override;
     virtual void take_dom_node_screenshot(u64 page_id, Web::UniqueNodeID node_id) override;
+    virtual void dump_document_skp(u64 page_id, ByteString path) override;
 
     virtual void request_internal_page_info(u64 page_id, WebView::PageInfoType) override;
 

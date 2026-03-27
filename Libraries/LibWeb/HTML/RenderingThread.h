@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <AK/ByteString.h>
 #include <AK/Noncopyable.h>
 #include <AK/Queue.h>
 #include <LibThreading/ConditionVariable.h>
@@ -35,6 +36,7 @@ public:
     void update_backing_stores(RefPtr<Gfx::PaintingSurface> front, RefPtr<Gfx::PaintingSurface> back, i32 front_id, i32 back_id);
     void present_frame(Gfx::IntRect);
     void request_screenshot(NonnullRefPtr<Gfx::PaintingSurface>, Function<void()>&& callback);
+    void request_skp_dump(Gfx::IntSize size, ByteString output_path, Function<void(Optional<ByteString>)>&& callback);
 
     void ready_to_paint();
 

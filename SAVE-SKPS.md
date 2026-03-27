@@ -1,34 +1,25 @@
 # Save SKPs
 
-Set `LADYBIRD_DUMP_SKP_DIR` to an existing directory before launching Ladybird.
-
-Example with the usual run path:
-
-```sh
-mkdir -p /tmp/ladybird-skps
-LADYBIRD_DUMP_SKP_DIR=/tmp/ladybird-skps ./Meta/ladybird.py run
-```
-
-Open a specific page:
-
-```sh
-mkdir -p /tmp/ladybird-skps
-LADYBIRD_DUMP_SKP_DIR=/tmp/ladybird-skps ./Meta/ladybird.py run https://example.com
-```
+Use `--dump-skp` to load a page, dump a single full-page SKP, and exit.
 
 Run the built app directly:
 
 ```sh
-mkdir -p /tmp/ladybird-skps
-LADYBIRD_DUMP_SKP_DIR=/tmp/ladybird-skps Build/release/bin/Ladybird.app/Contents/MacOS/Ladybird https://example.com
+Build/release/bin/Ladybird.app/Contents/MacOS/Ladybird \
+  --disable-http-disk-cache \
+  --dump-skp /tmp/example.skp \
+  https://example.com
 ```
 
-SKPs are written as files like `frame-<n>-<width>x<height>.skp`.
+The command:
 
-Check that dumps were created:
+- loads exactly one URL
+- renders a full-page display list through the screenshot-style off-screen path
+- waits briefly for a post-load paint to settle before capturing
+- writes one `.skp` file to the path you passed
+- exits when the dump finishes
 
-```sh
-ls -lh /tmp/ladybird-skps/*.skp
-```
+Notes:
 
-Current behavior: this dumps on render, not as a one-shot debug action.
+- `--dump-skp` is a headless one-shot mode.
+- It cannot be combined with `--headless`.

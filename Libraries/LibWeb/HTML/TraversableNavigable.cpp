@@ -1484,4 +1484,30 @@ void TraversableNavigable::process_screenshot_requests()
     }
 }
 
+void TraversableNavigable::process_skp_dump_requests()
+{
+    auto& client = page().client();
+    while (!m_skp_dump_tasks.is_empty()) {
+        auto task = m_skp_dump_tasks.dequeue();
+
+        auto document = active_document();
+        if (!document) {
+            client.page_did_dump_skp(task.path, ByteString { "Unable to dump SKP for the current page"sv });
+            continue;
+        }
+
+        document->update_layout(DOM::UpdateLayoutReason::ProcessScreenshot);
+        if (!document->layout_node() || !document->layout_node()->paintable_box()) {
+            client.page_did_dump_skp(task.path, ByteString { "Unable to dump SKP for the current page"sv });
+            continue;
+        }
+        auto scrollable_overflow_rect = document->layout_node()->paintable_box()->scrollable_overflow_rect();
+        auto rect = page().enclosing_device_rect(scrollable_overflow_rect.value());
+        PaintConfig paint_config { .paint_overlay = true, .canvas_fill_rect = rect.to_type<int>() };
+        top_level_traversable()->dump_skp(task.path, paint_config, [path = move(task.path), &client](Optional<ByteString> error_message) {
+            client.page_did_dump_skp(path, error_message);
+        });
+    }
+}
+
 }

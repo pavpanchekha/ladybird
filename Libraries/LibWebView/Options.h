@@ -78,6 +78,7 @@ struct BrowserOptions {
     Vector<URL::URL> urls;
     Vector<ByteString> raw_urls;
     Optional<HeadlessMode> headless_mode;
+    Optional<ByteString> dump_skp_path;
     int window_width { 800 };
     int window_height { 600 };
     NewWindow new_window { NewWindow::No };
@@ -91,6 +92,11 @@ struct BrowserOptions {
     Optional<DNSSettings> dns_settings {};
     Optional<u16> devtools_port;
     EnableContentFilter enable_content_filter { EnableContentFilter::Yes };
+
+    bool is_headless() const
+    {
+        return headless_mode.has_value() || dump_skp_path.has_value();
+    }
 };
 
 enum class HTTPDiskCacheMode {

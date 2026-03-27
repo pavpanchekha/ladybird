@@ -523,6 +523,7 @@ void EventLoop::update_the_rendering()
         if (!navigable->is_traversable())
             continue;
         auto traversable = navigable->traversable_navigable();
+        traversable->process_skp_dump_requests();
         traversable->process_screenshot_requests();
         if (!navigable->needs_repaint())
             continue;

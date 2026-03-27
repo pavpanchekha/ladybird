@@ -37,7 +37,7 @@ void Application::create_platform_options(WebView::BrowserOptions&, WebView::Req
 
 NonnullOwnPtr<Core::EventLoop> Application::create_platform_event_loop()
 {
-    if (!browser_options().headless_mode.has_value()) {
+    if (!browser_options().is_headless()) {
         Core::EventLoopManager::install(*new EventLoopManagerMacOS);
         [::Application sharedApplication];
     }

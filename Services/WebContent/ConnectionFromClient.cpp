@@ -937,6 +937,15 @@ void ConnectionFromClient::take_dom_node_screenshot(u64 page_id, Web::UniqueNode
     page->queue_screenshot_task(node_id);
 }
 
+void ConnectionFromClient::dump_document_skp(u64 page_id, ByteString path)
+{
+    auto page = this->page(page_id);
+    if (!page.has_value())
+        return;
+
+    page->queue_skp_dump_task(move(path));
+}
+
 static void append_page_text(Web::Page& page, StringBuilder& builder)
 {
     auto* document = page.top_level_browsing_context().active_document();

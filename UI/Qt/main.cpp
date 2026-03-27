@@ -48,7 +48,7 @@ ErrorOr<int> ladybird_main(Main::Arguments arguments)
 
     WebView::copy_default_config_files(Ladybird::Settings::the()->directory());
 
-    if (auto const& browser_options = Ladybird::Application::browser_options(); !browser_options.headless_mode.has_value()) {
+    if (auto const& browser_options = Ladybird::Application::browser_options(); !browser_options.is_headless()) {
         if (browser_options.force_new_process == WebView::ForceNewProcess::No) {
             auto disposition = TRY(browser_process.connect(browser_options.raw_urls, browser_options.new_window));
 

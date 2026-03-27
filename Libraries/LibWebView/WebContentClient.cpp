@@ -414,6 +414,12 @@ void WebContentClient::did_take_screenshot(u64 page_id, Gfx::ShareableBitmap scr
         view->did_receive_screenshot({}, screenshot);
 }
 
+void WebContentClient::did_dump_skp(u64 page_id, ByteString path, Optional<ByteString> error_message)
+{
+    if (auto view = view_for_page_id(page_id); view.has_value())
+        view->did_finish_dumping_skp({}, move(path), error_message);
+}
+
 void WebContentClient::did_get_internal_page_info(u64 page_id, WebView::PageInfoType type, Optional<Core::AnonymousBuffer> info)
 {
     if (auto view = view_for_page_id(page_id); view.has_value())

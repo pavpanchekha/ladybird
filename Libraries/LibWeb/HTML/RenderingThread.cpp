@@ -47,7 +47,13 @@ struct ScreenshotCommand {
     Function<void()> callback;
 };
 
-using CompositorCommand = Variant<UpdateDisplayListCommand, UpdateBackingStoresCommand, ScreenshotCommand>;
+struct DumpSkpCommand {
+    Gfx::IntSize size;
+    ByteString output_path;
+    Function<void(Optional<ByteString>)> callback;
+};
+
+using CompositorCommand = Variant<UpdateDisplayListCommand, UpdateBackingStoresCommand, ScreenshotCommand, DumpSkpCommand>;
 
 class RenderingThread::ThreadData final : public AtomicRefCounted<ThreadData> {
 public:
@@ -134,6 +140,26 @@ public:
                         if (cmd.callback) {
                             invoke_on_main_thread([callback = move(cmd.callback)]() mutable {
                                 callback();
+                            });
+                        }
+                    },
+                    [this](DumpSkpCommand& cmd) {
+                        if (!m_cached_display_list) {
+                            if (cmd.callback) {
+                                invoke_on_main_thread([callback = move(cmd.callback)]() mutable {
+                                    callback(ByteString { "Unable to dump SKP before a display list is ready"sv });
+                                });
+                            }
+                            return;
+                        }
+
+                        auto result = m_skia_player->dump_skp(*m_cached_display_list, Painting::ScrollStateSnapshotByDisplayList(m_cached_scroll_state_snapshot), cmd.size, cmd.output_path);
+                        if (cmd.callback) {
+                            auto error_message = result.is_error()
+                                ? Optional<ByteString> { ByteString::formatted("Failed to dump SKP to {}", cmd.output_path) }
+                                : Optional<ByteString> {};
+                            invoke_on_main_thread([callback = move(cmd.callback), error_message = move(error_message)]() mutable {
+                                callback(move(error_message));
                             });
                         }
                     });
@@ -270,6 +296,11 @@ void RenderingThread::present_frame(Gfx::IntRect viewport_rect)
 void RenderingThread::request_screenshot(NonnullRefPtr<Gfx::PaintingSurface> target_surface, Function<void()>&& callback)
 {
     m_thread_data->enqueue_command(ScreenshotCommand { move(target_surface), move(callback) });
+}
+
+void RenderingThread::request_skp_dump(Gfx::IntSize size, ByteString output_path, Function<void(Optional<ByteString>)>&& callback)
+{
+    m_thread_data->enqueue_command(DumpSkpCommand { size, move(output_path), move(callback) });
 }
 
 void RenderingThread::ready_to_paint()

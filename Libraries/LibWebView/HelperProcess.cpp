@@ -94,7 +94,7 @@ static ErrorOr<NonnullRefPtr<WebView::WebContentClient>> launch_web_content_proc
         web_content_options.executable_path.to_byte_string(),
     };
 
-    if (browser_options.headless_mode.has_value())
+    if (browser_options.is_headless())
         arguments.append("--headless"sv);
 
     if (web_content_options.config_path.has_value()) {

@@ -2892,6 +2892,13 @@ void Navigable::render_screenshot(Gfx::PaintingSurface& painting_surface, PaintC
     m_rendering_thread.request_screenshot(painting_surface, move(callback));
 }
 
+void Navigable::dump_skp(ByteString path, PaintConfig paint_config, Function<void(Optional<ByteString>)>&& callback)
+{
+    record_display_list_and_scroll_state(paint_config);
+    auto dump_rect = paint_config.canvas_fill_rect.value_or(Gfx::IntRect {}).size();
+    m_rendering_thread.request_skp_dump(dump_rect, move(path), move(callback));
+}
+
 GC::Ref<WebIDL::Promise> Navigable::scroll_viewport_by_delta(CSSPixelPoint delta)
 {
     auto vv = active_document()->visual_viewport();

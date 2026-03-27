@@ -790,6 +790,11 @@ void PageClient::page_did_take_screenshot(Gfx::ShareableBitmap const& screenshot
     client().async_did_take_screenshot(m_id, screenshot);
 }
 
+void PageClient::page_did_dump_skp(ByteString const& path, Optional<ByteString> const& error_message)
+{
+    client().async_did_dump_skp(m_id, path, error_message);
+}
+
 ErrorOr<void> PageClient::connect_to_webdriver(ByteString const& webdriver_endpoint)
 {
     VERIFY(!m_webdriver);
@@ -1009,6 +1014,11 @@ Web::DisplayListPlayerType PageClient::display_list_player_type() const
 void PageClient::queue_screenshot_task(Optional<Web::UniqueNodeID> node_id)
 {
     page().top_level_traversable()->queue_screenshot_task(node_id);
+}
+
+void PageClient::queue_skp_dump_task(ByteString path)
+{
+    page().top_level_traversable()->queue_skp_dump_task(move(path));
 }
 
 }
